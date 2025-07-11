@@ -1,0 +1,65 @@
+import pytest
+from thomas.dag import DAG, DAGBuilder, Task, Branch
+
+def get_tasks(num: int) -> tuple[Task, ...]:
+    def noop():
+        return {} 
+    return tuple([
+        Task(name=f"Task{i+1}", on_execute=noop)
+        for i in range(num)
+    ]) 
+
+def get_branches(num: int) -> tuple[Branch, ...]:
+    def condition():
+        return ""
+
+    return tuple([
+        Branch(name=f"Branch{i}", on_execute=condition) for i in range(num)
+    ])
+
+def test_basic_dag(builder: DAGBuilder):
+    t1, t2, t3 = get_tasks(3)
+
+    builder.add_root(
+        t1
+    ).add_task(
+        t2
+    ).add_task(
+        t3
+    )
+
+    dag = builder.finalize()
+
+    print(dag._adj)
+    assert len(dag._tasks) == 3
+    
+    assert [i.id for i in dag._adj[t1.id]] == [t2.id]
+    assert [i.id for i in dag._adj[t2.id]] == [t3.id]
+
+def test_branched_dag(builder: DAGBuilder):
+    t1, t2, t3, t4, t5, t6 = get_tasks(6)
+    branch = get_branches(1)
+    
+    b1, b2, b3 = builder.add_root(
+        t1
+    ).add_task(
+        t2
+    ).add_task(
+        t3
+    ).branch(
+        condition=branch, n_branches=3
+    )
+
+    b1.add_task(t4)
+    b2.add_task(t5)
+    b3.add_task(t6)
+
+    dag = builder.finalize()
+
+    print(dag._adj)
+    assert [i.id for i in dag._adj[t1.id]] == [t2.id]
+    assert [i.id for i in dag._adj[t2.id]] == [t3.id]
+    assert [i.id for i in dag._adj[t3.id]] == [branch.id]
+    assert [i.id for i in dag._adj[branch.id]] == [t4.id, t5.id, t6.id]
+    
+    
