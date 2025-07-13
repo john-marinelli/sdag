@@ -4,12 +4,15 @@ import threading
 from typing import Callable, Any, TypeVar, Protocol, Generic
 from uuid import uuid4, UUID
 from abc import abstractmethod
-from numba import njit
+from numba import njit, types
+from numba.typed import Dict, List
 import logging
 import inspect
 
 class CallableProtocol(Protocol):
     def __call__(self, *args: Any, **kwargs: Any) -> Any: ...
+
+JITInputValue = types.UnionType([types.float64, types.int64, types.unicode_type])
 
 logging.basicConfig(
     level=logging.INFO,
@@ -17,20 +20,24 @@ logging.basicConfig(
 )
 
 T = TypeVar("T", bound=Callable[..., Any])
-U = TypeVar("U", bound=tuple[Any, Any, Any])
+U = TypeVar("U")
 
 
 class _Node(Generic[T, U]):
     name: str
     id: UUID
     _exe: T
+    _jit_exe: Callable[..., Any] | None
     _suc: Callable[..., None] | None
     _err: Callable[..., None] | None
     _sig: list[str]
     _pol: Callable[[list[TaskState]], bool]
+    _state: TaskState
     _deps: list[_Node]
     _placed: bool
-    _input_history: bool
+    _processed: bool
+    _input_history: list[dict[str, Any]] | List[Dict[str, Any]]
+    _store_input_history: bool
     _jit: bool
     
     def __init__(
@@ -42,7 +49,18 @@ class _Node(Generic[T, U]):
         jit: bool = False,
         store_input_history: bool = False
     ) -> None:
-        self._exe = njit()(on_execute) if jit else on_execute  # type: ignore
+        if jit:
+            self._jit_exe = njit()(on_execute)
+            def jitted(**kwargs) -> dict[str, Any]:
+                if self._jit_exe is None:
+                    raise Exception(
+                        "No jitted function available to call"
+                    )
+                res = self._jit_exe(**kwargs)
+                return {k: v for k, v in res.items()}
+            self._exe = jitted  # type: ignore
+        else:
+            self._exe = on_execute
         self._suc = on_success
         self._err = on_error
         self.name = name
@@ -60,6 +78,12 @@ class _Node(Generic[T, U]):
     @abstractmethod
     def run(self, **kwargs) -> U: ...
 
+    @abstractmethod
+    def on_success(self) -> None: ...
+
+    @abstractmethod
+    def on_error(self) -> None: ...
+        
     @property
     def state(self) -> TaskState:
         return self._state
@@ -84,33 +108,59 @@ class _Node(Generic[T, U]):
     
     def place(self) -> None:
         self._placed = True
+
+    def _register_input(self, input_dict: dict[str, Any]) -> dict | Dict:
+        if self._store_input_history:
+            if self._jit:
+                d = Dict.empty(key_type=types.unicode_type, value_type=JITInputValue) 
+                for k, v in input_dict.items():
+                    d[k] = v
+            else:
+                d = input_dict
+            self._input_history.append(d)
+            d["input_history"] = self._input_history
+        else:
+            d = input_dict
+
+        return d
+        
     
     def __repr__(self):
         return self.name
 
-class Task(_Node[Callable[..., dict[str, Any]], tuple[dict[str, Any], None, None]]):
+class Task(_Node[Callable[..., dict[str, Any]], dict[str, Any]]):
     
-    def run(self, **kwargs) -> tuple[dict[str, Any], None, None]:
-        if self._store_input_history:
-            self._input_history.append(kwargs)
-            kwargs["input_history"] = self._input_history
+    def run(self, **kwargs) -> dict[str, Any]:
+        d = self._register_input(kwargs)
         params = {
-            k: v for k, v in kwargs.items() if k in self._sig
+            k: v for k, v in d.items() if k in self._sig
         }
-        return self._exe(**params), None, None
+        return self._exe(**params)
     
-class Branch(_Node[Callable[..., str], tuple[str, None, None]]): 
+class Branch(_Node[Callable[..., str], tuple[str, dict[str, Any]]]): 
+
+    def __init__(
+        self,
+        name: str,
+        on_execute: Callable[..., str],
+        on_success: Callable[..., None] | None = None,
+        on_error: Callable[..., None] | None = None,
+        store_input_history: bool = False
+    ) -> None:
+        super().__init__(
+            name=name, 
+            on_execute=on_execute, 
+            on_success=on_success,
+            on_error=on_error, 
+            store_input_history=store_input_history
+        )
     
-    def run(self, **kwargs) -> tuple[str, None, None]:
-        if self._store_input_history:
-            if self._jit:
-                
-            self._input_history.append(kwargs)
-            kwargs["input_history"] = self._input_history
+    def run(self, **kwargs) -> tuple[str, dict[str, Any]]:
+        d = self._register_input(kwargs)
         params = {
-            k: v for k, v in kwargs.items() if k in self._sig
+            k: v for k, v in d.items() if k in self._sig
         }
-        return self._exe(**params), None, None
+        return self._exe(**params), kwargs
 
 class DAGBuilder:
     dag: DAG
