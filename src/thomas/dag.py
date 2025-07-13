@@ -30,6 +30,8 @@ class _Node(Generic[T, U]):
     _pol: Callable[[list[TaskState]], bool]
     _deps: list[_Node]
     _placed: bool
+    _input_history: bool
+    _jit: bool
     
     def __init__(
         self,
@@ -37,7 +39,8 @@ class _Node(Generic[T, U]):
         on_execute: T,
         on_success: Callable[..., None] | None = None,
         on_error: Callable[..., None] | None = None,
-        jit: bool = False 
+        jit: bool = False,
+        store_input_history: bool = False
     ) -> None:
         self._exe = njit()(on_execute) if jit else on_execute  # type: ignore
         self._suc = on_success
@@ -48,6 +51,8 @@ class _Node(Generic[T, U]):
         self._policy = POLICIES[RunPolicy.NEVER]
         self._placed = False
         self._deps = []
+        self._input_history = []
+        self._store_input_history = store_input_history
         
         sig = inspect.signature(self._exe)
         self._sig = list(sig.parameters.keys())
@@ -86,6 +91,9 @@ class _Node(Generic[T, U]):
 class Task(_Node[Callable[..., dict[str, Any]], tuple[dict[str, Any], None, None]]):
     
     def run(self, **kwargs) -> tuple[dict[str, Any], None, None]:
+        if self._store_input_history:
+            self._input_history.append(kwargs)
+            kwargs["input_history"] = self._input_history
         params = {
             k: v for k, v in kwargs.items() if k in self._sig
         }
@@ -94,6 +102,11 @@ class Task(_Node[Callable[..., dict[str, Any]], tuple[dict[str, Any], None, None
 class Branch(_Node[Callable[..., str], tuple[str, None, None]]): 
     
     def run(self, **kwargs) -> tuple[str, None, None]:
+        if self._store_input_history:
+            if self._jit:
+                
+            self._input_history.append(kwargs)
+            kwargs["input_history"] = self._input_history
         params = {
             k: v for k, v in kwargs.items() if k in self._sig
         }
