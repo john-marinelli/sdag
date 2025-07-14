@@ -4,13 +4,14 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 authors = [
-    { name = "john-marinelli", email = "johnmarinelliwriting@gmail.com" }
+    { name = "john-marinelli", email = "marinelli.john@proton.me" }
 ]
 requires-python = ">=3.13"
 dependencies = [
     "matplotlib>=3.10.3",
     "networkx>=3.5",
     "numba>=0.61.2",
+    "pathos>=0.3.4",
     "polars>=1.31.0",
 ]
 
