@@ -1,12 +1,12 @@
 from __future__ import annotations
 from thomas.state import TaskState
 from thomas.node import _Node, Task
+from thomas.executors import Executor
 import threading
 from uuid import UUID
 from numba import types
 import logging
 
-JITInputValue = types.UnionType([types.float64, types.int64, types.unicode_type])
 
 logging.basicConfig(
     level=logging.INFO,
@@ -19,6 +19,7 @@ class DAG:
     _states: dict[UUID, TaskState]
     _roots: list[_Node]
     _lock: threading.RLock
+    _executor: Executor
     
     def __init__(self) -> None:
         self._adj = {}
@@ -44,14 +45,6 @@ class DAG:
     def get_downstream(self, task_id: UUID) -> list[_Node]:
         return self._adj[task_id]
     
-    @property
-    def roots(self) -> list[_Node]:
-        return self._roots
-    
-    @property
-    def tasks(self) -> dict[UUID, _Node]:
-        return self._tasks
-
     def initialize_tasks(self) -> None:
         for t in self._tasks:
             self._tasks[t].state = TaskState.AWAITING_UPSTREAM
@@ -61,4 +54,3 @@ class DAG:
         
     def validate_dag(self) -> None:
         pass
-

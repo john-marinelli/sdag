@@ -3,13 +3,17 @@ from typing import Generic, TypeVar, Callable, Any
 from uuid import UUID, uuid4
 from numba.typed import List, Dict
 from numba import njit
+from numba import types
 from thomas.state import TaskState, POLICIES, RunPolicy
 from abc import abstractmethod
 from dataclasses import dataclass
 import inspect
 
+
 T = TypeVar("T", bound=Callable[..., Any])
 U = TypeVar("U")
+V = TypeVar("V")
+JITInputValue = types.UnionType([types.float64, types.int64, types.unicode_type])
 
 
 @dataclass
@@ -24,7 +28,7 @@ class BranchResult:
     prev_output: dict[str, Any]
     branch: Branch
 
-class _Node(Generic[T, U]):
+class _Node(Generic[T, U, V]):
     name: str
     id: UUID
     _exe: T
@@ -38,6 +42,7 @@ class _Node(Generic[T, U]):
     _placed: bool
     _processed: bool
     _input_history: list[dict[str, Any]] | List[Dict[str, Any]]
+    _output: V
     _store_input_history: bool
     _jit: bool
     
@@ -129,17 +134,19 @@ class _Node(Generic[T, U]):
     def __repr__(self):
         return self.name
 
-class Task(_Node[Callable[..., dict[str, Any]], tuple[dict[str, Any], "Task"]]):
+class Task(_Node[Callable[..., dict[str, Any]], "Task", dict[str, Any]]):
     
-    def run(self, **kwargs) -> tuple[dict[str, Any], Task]:
+    def run(self, **kwargs) -> Task:
         d = self._register_input(kwargs)
         params = {
             k: v for k, v in d.items() if k in self._sig
         }
-        return self._exe(**params), self
+        self._output = self._exe(**params)
+        return self
     
-class Branch(_Node[Callable[..., str], tuple[str, dict[str, Any], "Branch"]]): 
-
+class Branch(_Node[Callable[..., str], "Branch", str]): 
+    _arg_passthrough: dict[str, Any]
+    
     def __init__(
         self,
         name: str,
@@ -156,10 +163,11 @@ class Branch(_Node[Callable[..., str], tuple[str, dict[str, Any], "Branch"]]):
             store_input_history=store_input_history
         )
     
-    def run(self, **kwargs) -> tuple[str, dict[str, Any], Branch]:
+    def run(self, **kwargs) -> Branch:
         d = self._register_input(kwargs)
         params = {
             k: v for k, v in d.items() if k in self._sig
         }
-        return self._exe(**params), kwargs, self
+        self._output = self._exe(**params)
+        return self
 
