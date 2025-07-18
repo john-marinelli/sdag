@@ -1,18 +1,9 @@
-from thomas.node import Task, Branch
+from thomas.node import _Node
 from pathos.pools import ProcessPool
 from typing import TypeVar, Protocol, Callable, Any
 from abc import ABC, abstractmethod
 
 T = TypeVar("T", covariant=True)
-type TaskResult = tuple[
-    dict[str, Any],
-    Task
-]
-type BranchResult = tuple[
-    str,
-    dict[str, Any],
-    Branch
-]
 
 class _PathosFuture(Protocol[T]):
     """Protocol for pathos Futures"""
@@ -28,32 +19,35 @@ class Executor(ABC):
     def submit(
         self, 
         func: Callable, 
-        kwargs: dict[str, Any]
     ) -> None: ...
         
     @abstractmethod
-    def poll(self) -> list[TaskResult | BranchResult]: ...
+    def poll(self) -> list[_Node]: ...
 
 
 class SequentialExecutor(Executor):
-    _results: list[TaskResult | BranchResult]
+    _results: list[_Node]
 
     def __init__(self) -> None:
         self._results = []
 
     def submit(
         self,
-        func: Callable[..., TaskResult] | Callable[..., BranchResult],
-        kwargs: dict[str, Any]
+        func: Callable[..., _Node],
     ) -> None:
-        self._results.append(func(**kwargs))
+        self._results.append(func())
+
+    def poll(self) -> list[_Node]:
+        if self._results:
+            return [
+                self._results.pop(i) 
+                for i in range(len(self._results))
+            ]
+        return []
 
 class PathosExecutor(Executor):
     _pool: ProcessPool
-    _futures: list[
-        _PathosFuture[TaskResult] |
-        _PathosFuture[BranchResult]
-    ]
+    _futures: list[_PathosFuture[_Node]]
 
     def __init__(self, workers=4) -> None:
         self._pool = ProcessPool(workers=workers)
@@ -61,15 +55,15 @@ class PathosExecutor(Executor):
     def submit(
         self, 
         func: Callable[..., dict[str, Any]] | Callable[..., str],
-        kwargs: dict[str, Any]
     ) -> None:
+        self._futures.append(self._pool.apipe(func))
 
-        future = self._pool.apipe(
-            lambda: func(**kwargs)
-        )
-        self._futures.append(future)
-
-    def poll(self) -> list[TaskResult | BranchResult]:
-        return [
-            i.get() for i in self._futures if i.ready()
-        ]
+    def poll(self) -> list[_Node]:
+        finished = []
+        for idx, res in enumerate(self._futures):
+            if res.ready():
+                finished.append(self._futures.pop(idx))
+        return finished
+    
+    def empty(self) -> bool:
+        return len(self._futures) == 0

@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Generic, TypeVar, Callable, Any
+from typing import Generic, TypeVar, Callable, Any, Self
 from uuid import UUID, uuid4
 from numba.typed import List, Dict
 from numba import njit
@@ -14,21 +14,10 @@ T = TypeVar("T", bound=Callable[..., Any])
 U = TypeVar("U")
 V = TypeVar("V")
 JITInputValue = types.UnionType([types.float64, types.int64, types.unicode_type])
+EMPTY_DICT = {}
 
 
-@dataclass
-class TaskResult:
-    output: dict[str, Any]
-    task: Task
-
-
-@dataclass
-class BranchResult:
-    output: str
-    prev_output: dict[str, Any]
-    branch: Branch
-
-class _Node(Generic[T, U, V]):
+class _Node(Generic[T, V]):
     name: str
     id: UUID
     _exe: T
@@ -82,7 +71,7 @@ class _Node(Generic[T, U, V]):
         self._sig = list(sig.parameters.keys())
         
     @abstractmethod
-    def run(self, **kwargs) -> U: ...
+    def run(self) -> Self: ...
 
     @abstractmethod
     def on_success(self) -> None: ...
@@ -115,38 +104,37 @@ class _Node(Generic[T, U, V]):
     def place(self) -> None:
         self._placed = True
 
-    def _register_input(self, input_dict: dict[str, Any]) -> dict | Dict:
+    def register_input(self, input_dict: dict[str, Any]) -> None:
+        params = {
+            k: v for k, v in input_dict.items() if k in self._sig
+        }
         if self._store_input_history:
             if self._jit:
                 d = Dict.empty(key_type=types.unicode_type, value_type=JITInputValue) 
-                for k, v in input_dict.items():
+                for k, v in params.items():
                     d[k] = v
             else:
-                d = input_dict
+                d = params
             self._input_history.append(d)
             d["input_history"] = self._input_history
         else:
-            d = input_dict
-
-        return d
-        
+            self._input_history = [params]
     
     def __repr__(self):
         return self.name
 
-class Task(_Node[Callable[..., dict[str, Any]], "Task", dict[str, Any]]):
+class Task(_Node[Callable[..., dict[str, Any]], dict[str, Any]]):
     
-    def run(self, **kwargs) -> Task:
-        d = self._register_input(kwargs)
-        params = {
-            k: v for k, v in d.items() if k in self._sig
-        }
-        self._output = self._exe(**params)
+    def run(self) -> Task:
+        if self._input_history:
+            kwargs = self._input_history[-1]
+        else:
+            kwargs = {}
+        self._output = self._exe(**kwargs)
         return self
     
-class Branch(_Node[Callable[..., str], "Branch", str]): 
-    _arg_passthrough: dict[str, Any]
-    
+class Branch(_Node[Callable[..., str], str]): 
+
     def __init__(
         self,
         name: str,
@@ -156,18 +144,18 @@ class Branch(_Node[Callable[..., str], "Branch", str]):
         store_input_history: bool = False
     ) -> None:
         super().__init__(
-            name=name, 
-            on_execute=on_execute, 
+            name=name,
+            on_execute=on_execute,
             on_success=on_success,
-            on_error=on_error, 
+            on_error=on_error,
             store_input_history=store_input_history
         )
-    
-    def run(self, **kwargs) -> Branch:
-        d = self._register_input(kwargs)
-        params = {
-            k: v for k, v in d.items() if k in self._sig
-        }
-        self._output = self._exe(**params)
+   
+    def run(self) -> Branch:
+        if len(self._input_history) == 0:
+            raise Exception(
+                f"No input history available for task {self.name}"
+            )
+        self._output = self._exe(**self._input_history[-1])
         return self
 

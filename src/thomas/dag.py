@@ -1,11 +1,12 @@
 from __future__ import annotations
 from thomas.state import TaskState
-from thomas.node import _Node, Task
+from thomas.node import _Node, Task, Branch
 from thomas.executors import Executor
-import threading
+from collections import deque
 from uuid import UUID
 from numba import types
 import logging
+import threading
 
 
 logging.basicConfig(
@@ -54,3 +55,19 @@ class DAG:
         
     def validate_dag(self) -> None:
         pass
+
+    def run(self) -> None:
+        dag_q: deque[_Node] = deque(self._roots)
+        while dag_q:
+            executing = []
+            for task in dag_q:
+                if task.
+                    executing.append(task)
+                    self._executor.submit(task.run)
+
+            # TODO poll for finished tasks when using pathos
+            
+            
+
+            
+            
