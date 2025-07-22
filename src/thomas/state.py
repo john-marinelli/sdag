@@ -27,6 +27,7 @@ class TaskState(Enum):
     RUNNING = "running"
     FAILED = "failed"
     SUCCESS = "successful"
+    SKIPPED = "skipped"
 
 
 class RunPolicy(Enum):

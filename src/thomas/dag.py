@@ -58,12 +58,9 @@ class DAG:
 
     def run(self) -> None:
         dag_q: deque[_Node] = deque(self._roots)
+        exec_q: deque[_Node] = deque()
         while dag_q:
-            executing = []
-            for task in dag_q:
-                if task.
-                    executing.append(task)
-                    self._executor.submit(task.run)
+            if dag_q[0].can_run()
 
             # TODO poll for finished tasks when using pathos
             

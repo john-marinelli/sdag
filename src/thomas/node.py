@@ -119,6 +119,12 @@ class _Node(Generic[T, V]):
             d["input_history"] = self._input_history
         else:
             self._input_history = [params]
+
+    def can_run(self) -> bool:
+        return (
+            self._policy([i.state for i in self.deps]) 
+            and self.state == TaskState.READY
+        )
     
     def __repr__(self):
         return self.name
