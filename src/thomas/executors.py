@@ -24,6 +24,25 @@ class Executor(ABC):
     @abstractmethod
     def poll(self) -> list[_Node]: ...
 
+class TestExecutor(Executor):
+    _results: list[_Node] = []
+    executed: list[_Node] = []
+
+    def submit(
+        self,
+        func: Callable[..., _Node],
+    ) -> None:
+        res = func()
+        self.executed.append(res)
+        self._results.append(res)
+
+    def poll(self) -> list[_Node]:
+        if self._results:
+            return [
+                self._results.pop(i) 
+                for i in range(len(self._results))
+            ]
+        return []
 
 class SequentialExecutor(Executor):
     _results: list[_Node]

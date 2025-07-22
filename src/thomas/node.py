@@ -27,10 +27,12 @@ class _Node(Generic[T, V]):
     _sig: list[str]
     _pol: Callable[[list[TaskState]], bool]
     _state: TaskState
-    _deps: list[_Node]
-    _placed: bool
-    _processed: bool
-    _input_history: list[dict[str, Any]] | List[Dict[str, Any]]
+    _deps: list[UUID] = []
+    _policy: Callable[[list[TaskState]], bool]
+    _placed: bool = False
+    _processed: bool = False
+    _exception: Exception | None = None
+    _input_history: list[dict[str, Any]] | List[Dict[str, Any]] = []
     _output: V
     _store_input_history: bool
     _jit: bool
@@ -62,9 +64,6 @@ class _Node(Generic[T, V]):
         self.id = uuid4()
         self._state = TaskState.BUILDING
         self._policy = POLICIES[RunPolicy.NEVER]
-        self._placed = False
-        self._deps = []
-        self._input_history = []
         self._store_input_history = store_input_history
         
         sig = inspect.signature(self._exe)
@@ -90,12 +89,16 @@ class _Node(Generic[T, V]):
         self._state = state
 
     @property
-    def deps(self) -> list[_Node]:
+    def deps(self) -> list[UUID]:
         return self._deps
 
     @deps.setter
-    def deps(self, deps: list[_Node]) -> None:
+    def deps(self, deps: list[UUID]) -> None:
         self._deps = deps
+
+    @property
+    def policy(self) -> Callable[[list[TaskState]], bool]:
+        return self._policy
 
     @property
     def placed(self) -> bool:
@@ -119,12 +122,6 @@ class _Node(Generic[T, V]):
             d["input_history"] = self._input_history
         else:
             self._input_history = [params]
-
-    def can_run(self) -> bool:
-        return (
-            self._policy([i.state for i in self.deps]) 
-            and self.state == TaskState.READY
-        )
     
     def __repr__(self):
         return self.name
@@ -136,7 +133,11 @@ class Task(_Node[Callable[..., dict[str, Any]], dict[str, Any]]):
             kwargs = self._input_history[-1]
         else:
             kwargs = {}
-        self._output = self._exe(**kwargs)
+        try:
+            self._output = self._exe(**kwargs)
+        except Exception as e:
+            self._exception = e
+            self._state = TaskState.FAILED
         return self
     
 class Branch(_Node[Callable[..., str], str]): 
@@ -162,6 +163,12 @@ class Branch(_Node[Callable[..., str], str]):
             raise Exception(
                 f"No input history available for task {self.name}"
             )
-        self._output = self._exe(**self._input_history[-1])
+        
+        try:
+            self._output = self._exe(**self._input_history[-1])
+        except Exception as e:
+            self._exception = e
+            self._state = TaskState.FAILED
+
         return self
 

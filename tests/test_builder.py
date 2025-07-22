@@ -1,5 +1,7 @@
 import pytest
-from thomas.dag import DAG, DAGBuilder, Task, Branch, join
+from thomas.dag import DAG
+from thomas.node import Task, Branch
+from thomas.builder import DAGBuilder, join
 
 def get_tasks(num: int) -> tuple[Task, ...]:
     def noop():
@@ -31,8 +33,8 @@ def test_basic_dag(builder: DAGBuilder) -> None:
 
     dag = builder.finalize()
 
-    assert [i.id for i in dag._adj[t1.id]] == [t2.id]
-    assert [i.id for i in dag._adj[t2.id]] == [t3.id]
+    assert [i for i in dag._adj[t1.id]] == [t2.id]
+    assert [i for i in dag._adj[t2.id]] == [t3.id]
     assert len(dag._tasks) == 3
 
 def test_branched_dag(builder: DAGBuilder) -> None:
@@ -55,9 +57,9 @@ def test_branched_dag(builder: DAGBuilder) -> None:
 
     dag = builder.finalize()
 
-    assert [i.id for i in dag._adj[t1.id]] == [t2.id]
-    assert [i.id for i in dag._adj[t2.id]] == [t3.id]
-    assert [i.id for i in dag._adj[t3.id]] == [branch.id]
+    assert [i for i in dag._adj[t1.id]] == [t2.id]
+    assert [i for i in dag._adj[t2.id]] == [t3.id]
+    assert [i for i in dag._adj[t3.id]] == [branch.id]
     assert [i.id for i in dag._adj[branch.id]] == [t4.id, t5.id, t6.id]
     assert len(dag._tasks) == 7
     
