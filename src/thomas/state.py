@@ -54,7 +54,7 @@ class RunPolicy(Enum):
         Never execute.
     """
     
-    ALL_SUCCESS = "all_successful" 
+    ALL_SUCCESS = "all_success"
     ALL_FAILED = "all_failed"
     ALL_DONE = "all_done"
     ONE_SUCCESS = "one_successful"

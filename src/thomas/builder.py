@@ -28,7 +28,7 @@ class DAGBuilder:
             
         self.dag._add_upstream(self.prev, task)
         
-        task.deps = [*self.prev.deps, self.prev]
+        task.deps = [*self.prev.deps, self.prev.id]
         task.place()
 
         return DAGBuilder(dag=self.dag, prev=task)
@@ -44,7 +44,7 @@ class DAGBuilder:
 
         self.dag._add_upstream(self.prev, condition)
 
-        condition.deps = [*self.prev.deps, self.prev]
+        condition.deps = [*self.prev.deps, self.prev.id]
         condition.place()
         
         return [
@@ -74,7 +74,7 @@ def join(junction: Task, branches: list[DAGBuilder]) -> DAGBuilder:
             raise ValueError(f"Branches need a root node in order to join")
 
         b.dag._add_upstream(b.prev, junction)
-        junction.deps = [*junction.deps, *b.prev.deps, b.prev]
+        junction.deps = [*junction.deps, *b.prev.deps, b.prev.id]
 
 
     junction.place()

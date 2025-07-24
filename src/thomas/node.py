@@ -6,8 +6,10 @@ from numba import njit
 from numba import types
 from thomas.state import TaskState, POLICIES, RunPolicy
 from abc import abstractmethod
-from dataclasses import dataclass
 import inspect
+import logging
+
+logging.basicConfig(filename="t.log", level=logging.INFO)
 
 
 T = TypeVar("T", bound=Callable[..., Any])
@@ -63,8 +65,8 @@ class _Node(Generic[T, V]):
         self.name = name
         self.id = uuid4()
         self._state = TaskState.BUILDING
-        self._policy = POLICIES[RunPolicy.NEVER]
         self._store_input_history = store_input_history
+        self._policy = POLICIES[RunPolicy.ALL_SUCCESS]
         
         sig = inspect.signature(self._exe)
         self._sig = list(sig.parameters.keys())
@@ -96,9 +98,8 @@ class _Node(Generic[T, V]):
     def deps(self, deps: list[UUID]) -> None:
         self._deps = deps
 
-    @property
-    def policy(self) -> Callable[[list[TaskState]], bool]:
-        return self._policy
+    def policy(self, states: list[TaskState]) -> bool:
+        return self._policy(states)
 
     @property
     def placed(self) -> bool:
@@ -137,7 +138,8 @@ class Task(_Node[Callable[..., dict[str, Any]], dict[str, Any]]):
             self._output = self._exe(**kwargs)
         except Exception as e:
             self._exception = e
-            self._state = TaskState.FAILED
+            self.state = TaskState.FAILED
+        self.state = TaskState.SUCCESS
         return self
     
 class Branch(_Node[Callable[..., str], str]): 

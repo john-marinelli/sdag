@@ -3,10 +3,8 @@ from thomas.state import TaskState
 from thomas.node import _Node, Task
 from thomas.executors import Executor
 from collections import deque
-from typing import Type
 from uuid import UUID
 import logging
-import threading
 
 
 logging.basicConfig(
@@ -73,9 +71,11 @@ class DAG:
             self._tasks[t].state = TaskState.RUNNING
 
     def _can_run(self, task: UUID) -> bool:
-
-        return self._tasks[task].policy(
-            [self._tasks[t].state for t in self._tasks[task].deps] 
+        return (
+            self._tasks[task].state == TaskState.READY and
+            self._tasks[task].policy(
+                [self._tasks[t].state for t in self._tasks[task].deps]
+            )
         )
     
     def _poll_finished(self) -> None:
