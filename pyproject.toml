@@ -1,7 +1,7 @@
 [project]
-name = "thomas"
+name = "sdag"
 version = "0.1.0"
-description = "Add your description here"
+description = "Small DAGs for smalld data"
 readme = "README.md"
 authors = [
     { name = "john-marinelli", email = "marinelli.john@proton.me" }
