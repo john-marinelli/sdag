@@ -1,8 +1,8 @@
 from __future__ import annotations
-from thomas.state import TaskState
-from thomas.node import _Node, Task
-from thomas.executors import Executor
-from thomas.result import TaskResult
+from sdag.state import TaskState
+from sdag.node import _Node, Task
+from sdag.executors import Executor
+from sdag.result import TaskResult
 from collections import deque
 from uuid import UUID
 import logging
@@ -66,6 +66,7 @@ class DAG:
             if self._can_run(t)
         ]
         for t in exec_q:
+            print("Submitting ", self._tasks[t].name)
             self._executor.submit(
                 self._tasks[t].run
             )

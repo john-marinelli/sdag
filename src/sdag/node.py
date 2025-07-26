@@ -4,9 +4,9 @@ from uuid import UUID, uuid4
 from numba.typed import List, Dict
 from numba import njit
 from numba import types
-from thomas.state import TaskState, POLICIES, RunPolicy
-from thomas.result import TaskResult, BranchResult
-from thomas.exceptions import TaskAttributeAccessError
+from sdag.state import TaskState, POLICIES, RunPolicy
+from sdag.result import TaskResult, BranchResult
+from sdag.exceptions import TaskAttributeAccessError
 from abc import abstractmethod
 import inspect
 import logging

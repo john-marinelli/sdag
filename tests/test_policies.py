@@ -1,4 +1,4 @@
-from thomas.state import TaskState, RunPolicy, POLICIES
+from sdag.state import TaskState, RunPolicy, POLICIES
 
 
 def test_all_success() -> None:

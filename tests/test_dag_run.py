@@ -1,18 +1,18 @@
-from thomas.builder import DAGBuilder
-from thomas.dag import DAG
-from thomas.node import Task
-from thomas.executors import TestExecutor
+from sdag.builder import DAGBuilder
+from sdag.dag import DAG
+from sdag.node import Task
+from sdag.executors import TestExecutor
 
 def t1():
-    print("t1")
+    print("Executing t1")
     return {}
 
 def t2():
-    print("t2")
+    print("Executing t2")
     return {}
     
 def t3():
-    print("t3")
+    print("Executing t3")
     return {}
 
 def test_simple_dag():

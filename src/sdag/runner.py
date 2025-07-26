@@ -1,5 +1,5 @@
-from thomas.dag import DAG
-from thomas.executors import PathosExecutor, Executor
+from sdag.dag import DAG
+from sdag.executors import PathosExecutor, Executor
 from typing import Any
 from uuid import UUID
 

@@ -1,7 +1,7 @@
 import pytest
-from thomas.dag import DAG
-from thomas.builder import DAGBuilder
-from thomas.executors import TestExecutor
+from sdag.dag import DAG
+from sdag.builder import DAGBuilder
+from sdag.executors import TestExecutor
 
 
 @pytest.fixture

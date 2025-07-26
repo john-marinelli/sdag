@@ -1,5 +1,5 @@
-from thomas.node import _Node
-from thomas.result import Result
+from sdag.node import _Node
+from sdag.result import Result
 from pathos.pools import ProcessPool
 from typing import TypeVar, Protocol, Callable, Any
 from abc import ABC, abstractmethod
@@ -27,7 +27,7 @@ class Executor(ABC):
     def poll(self) -> list[Result]: ...
 
 class TestExecutor(Executor):
-    _results: list[Result]
+    _results: list[Result] = []
     executed: list[UUID] = []
 
     def submit(
@@ -47,10 +47,7 @@ class TestExecutor(Executor):
         return []
 
 class SequentialExecutor(Executor):
-    _results: list[Result]
-
-    def __init__(self) -> None:
-        self._results = []
+    _results: list[Result] = []
 
     def submit(
         self,
@@ -68,7 +65,7 @@ class SequentialExecutor(Executor):
 
 class PathosExecutor(Executor):
     _pool: ProcessPool
-    _futures: list[_PathosFuture[_Node]]
+    _futures: list[_PathosFuture[Result]]
 
     def __init__(self, workers=4) -> None:
         self._pool = ProcessPool(workers=workers)

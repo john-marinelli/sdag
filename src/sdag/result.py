@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 from uuid import UUID
 
@@ -9,7 +9,7 @@ class Result:
 
 @dataclass
 class TaskResult(Result):
-    values: dict[str, Any] = {}
+    values: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass

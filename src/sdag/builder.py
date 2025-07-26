@@ -1,6 +1,6 @@
 from __future__ import annotations
-from thomas.dag import DAG
-from thomas.node import _Node, Task, Branch
+from sdag.dag import DAG
+from sdag.node import _Node, Task, Branch
 
 class DAGBuilder:
     dag: DAG

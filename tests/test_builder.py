@@ -1,7 +1,5 @@
-import pytest
-from thomas.dag import DAG
-from thomas.node import Task, Branch
-from thomas.builder import DAGBuilder, join
+from sdag.node import Task, Branch
+from sdag.builder import DAGBuilder, join
 
 def get_tasks(num: int) -> tuple[Task, ...]:
     def noop():
