@@ -5,6 +5,8 @@ from numba.typed import List, Dict
 from numba import njit
 from numba import types
 from thomas.state import TaskState, POLICIES, RunPolicy
+from thomas.result import TaskResult, BranchResult
+from thomas.exceptions import TaskAttributeAccessError
 from abc import abstractmethod
 import inspect
 import logging
@@ -16,10 +18,9 @@ T = TypeVar("T", bound=Callable[..., Any])
 U = TypeVar("U")
 V = TypeVar("V")
 JITInputValue = types.UnionType([types.float64, types.int64, types.unicode_type])
-EMPTY_DICT = {}
 
 
-class _Node(Generic[T, V]):
+class _Node(Generic[T, U]):
     name: str
     id: UUID
     _exe: T
@@ -35,7 +36,8 @@ class _Node(Generic[T, V]):
     _processed: bool = False
     _exception: Exception | None = None
     _input_history: list[dict[str, Any]] | List[Dict[str, Any]] = []
-    _output: V
+    _output: U | None = None
+    _input: TaskResult
     _store_input_history: bool
     _jit: bool
     
@@ -72,7 +74,7 @@ class _Node(Generic[T, V]):
         self._sig = list(sig.parameters.keys())
         
     @abstractmethod
-    def run(self) -> Self: ...
+    def run(self) -> U: ...
 
     @abstractmethod
     def on_success(self) -> None: ...
@@ -98,6 +100,22 @@ class _Node(Generic[T, V]):
     def deps(self, deps: list[UUID]) -> None:
         self._deps = deps
 
+    @property
+    def output(self) -> U | None:
+        return self._output 
+    
+    @output.setter
+    def output(self, output: U) -> None:
+        self._output = output
+
+    @property
+    def input(self) -> TaskResult:
+        return self._input
+    
+    @input.setter
+    def input(self, input: TaskResult) -> None:
+        self._input = input
+
     def policy(self, states: list[TaskState]) -> bool:
         return self._policy(states)
 
@@ -108,41 +126,59 @@ class _Node(Generic[T, V]):
     def place(self) -> None:
         self._placed = True
 
-    def register_input(self, input_dict: dict[str, Any]) -> None:
-        params = {
-            k: v for k, v in input_dict.items() if k in self._sig
-        }
-        if self._store_input_history:
-            if self._jit:
-                d = Dict.empty(key_type=types.unicode_type, value_type=JITInputValue) 
-                for k, v in params.items():
-                    d[k] = v
-            else:
-                d = params
-            self._input_history.append(d)
-            d["input_history"] = self._input_history
-        else:
-            self._input_history = [params]
+    @abstractmethod
+    def register_input(self, input: U) -> None: ...
     
     def __repr__(self):
         return self.name
 
-class Task(_Node[Callable[..., dict[str, Any]], dict[str, Any]]):
+class Task(_Node[Callable[..., dict[str, Any]], TaskResult]):
+
+    def __init__(
+        self,
+        name: str,
+        on_execute: Callable[..., dict[str, Any]],
+        on_success: Callable[..., None] | None = None,
+        on_error: Callable[..., None] | None = None,
+        jit: bool = False,
+        store_input_history: bool = False
+    ) -> None:
+        super().__init__(
+            name=name,
+            on_execute=on_execute,
+            on_success=on_success,
+            on_error=on_error,
+            jit=jit,
+            store_input_history=store_input_history
+        )
+        self.input = TaskResult(id=self.id)
     
-    def run(self) -> Task:
+    def run(self) -> TaskResult:
         if self._input_history:
             kwargs = self._input_history[-1]
         else:
             kwargs = {}
         try:
-            self._output = self._exe(**kwargs)
+            res = self._exe(**kwargs)
         except Exception as e:
-            self._exception = e
-            self.state = TaskState.FAILED
-        self.state = TaskState.SUCCESS
-        return self
+            return TaskResult(id=self.id, error=e)
+
+        return TaskResult(id=self.id, values=res)
     
-class Branch(_Node[Callable[..., str], str]): 
+    def register_input(self, input: TaskResult) -> None:
+        params = {
+            k: v for k, v in input.values.items() if k in self._sig
+        }
+        if self._store_input_history:
+            self._input_history.append(params)
+            input.values["input_history"] = self._input_history
+            self.input = input
+            return
+        
+        self.input = input
+
+    
+class Branch(_Node[Callable[..., str], BranchResult]): 
 
     def __init__(
         self,
@@ -160,17 +196,16 @@ class Branch(_Node[Callable[..., str], str]):
             store_input_history=store_input_history
         )
    
-    def run(self) -> Branch:
+    def run(self) -> BranchResult:
         if len(self._input_history) == 0:
             raise Exception(
                 f"No input history available for task {self.name}"
             )
         
         try:
-            self._output = self._exe(**self._input_history[-1])
+            res = self._exe(**self.input.values)
         except Exception as e:
-            self._exception = e
-            self._state = TaskState.FAILED
+            return BranchResult(id=self.id, error=e)
 
-        return self
+        return BranchResult(id=self.id, next_task=res)
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 from thomas.state import TaskState
 from thomas.node import _Node, Task
 from thomas.executors import Executor
+from thomas.result import TaskResult
 from collections import deque
 from uuid import UUID
 import logging
@@ -82,17 +83,26 @@ class DAG:
         finished = self._executor.poll()
 
         for f in finished:
-            self._tasks[f.id] = f
+            self._tasks[f.id].output = f
+            if f.error is not None:
+                self._tasks[f.id].state = TaskState.FAILED
+            else:
+                self._tasks[f.id].state = TaskState.SUCCESS
 
             for t in self._adj[f.id]:
-                if f.state == TaskState.SUCCESS:
+                if isinstance(f, TaskResult):
+                    self._tasks[t].input = f
+                if self._tasks[f.id].state == TaskState.SUCCESS:
                     self._tasks[t].state = TaskState.READY
                     self._queue.extend(self._adj[f.id])
                 else:
                     self._tasks[t].state = TaskState.SKIPPED
 
             self._queue.remove(f.id)
-            if f.state == TaskState.FAILED and f.on_error:
-                self._executor.submit(f.on_error)
-            elif f.on_success:
-                self._executor.submit(f.on_success)
+            if (
+                self._tasks[f.id].state == TaskState.FAILED 
+                and self._tasks[f.id].on_error
+            ):
+                self._executor.submit(self._tasks[f.id].on_error)
+            elif self._tasks[f.id].on_success:
+                self._executor.submit(self._tasks[f.id].on_success)

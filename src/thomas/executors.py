@@ -1,7 +1,9 @@
 from thomas.node import _Node
+from thomas.result import Result
 from pathos.pools import ProcessPool
 from typing import TypeVar, Protocol, Callable, Any
 from abc import ABC, abstractmethod
+from uuid import UUID
 
 T = TypeVar("T", covariant=True)
 
@@ -22,21 +24,21 @@ class Executor(ABC):
     ) -> None: ...
         
     @abstractmethod
-    def poll(self) -> list[_Node]: ...
+    def poll(self) -> list[Result]: ...
 
 class TestExecutor(Executor):
-    _results: list[_Node] = []
-    executed: list[_Node] = []
+    _results: list[Result]
+    executed: list[UUID] = []
 
     def submit(
         self,
-        func: Callable[..., _Node],
+        func: Callable[..., Result],
     ) -> None:
         res = func()
-        self.executed.append(res)
+        self.executed.append(res.id)
         self._results.append(res)
 
-    def poll(self) -> list[_Node]:
+    def poll(self) -> list[Result]:
         if self._results:
             return [
                 self._results.pop(i) 
@@ -45,18 +47,18 @@ class TestExecutor(Executor):
         return []
 
 class SequentialExecutor(Executor):
-    _results: list[_Node]
+    _results: list[Result]
 
     def __init__(self) -> None:
         self._results = []
 
     def submit(
         self,
-        func: Callable[..., _Node],
+        func: Callable[..., Result],
     ) -> None:
         self._results.append(func())
 
-    def poll(self) -> list[_Node]:
+    def poll(self) -> list[Result]:
         if self._results:
             return [
                 self._results.pop(i) 
@@ -77,7 +79,7 @@ class PathosExecutor(Executor):
     ) -> None:
         self._futures.append(self._pool.apipe(func))
 
-    def poll(self) -> list[_Node]:
+    def poll(self) -> list[Result]:
         finished = []
         for idx, res in enumerate(self._futures):
             if res.ready():
