@@ -37,9 +37,9 @@ class DAG:
         self._tasks[task.id] = task
     
     def _add_upstream(self, upstream: _Node, downstream: _Node) -> None:
-        if upstream.id not in self._adj:
-            self._adj[upstream.id] = []
         self._adj[upstream.id].append(downstream.id)
+        if downstream.id not in self._adj:
+            self._adj[downstream.id] = []
         self._tasks[downstream.id] = downstream
 
     def _initialize_tasks(self) -> None:
@@ -66,7 +66,6 @@ class DAG:
             if self._can_run(t)
         ]
         for t in exec_q:
-            print("Submitting ", self._tasks[t].name)
             self._executor.submit(
                 self._tasks[t].run
             )
@@ -102,8 +101,8 @@ class DAG:
             self._queue.remove(f.id)
             if (
                 self._tasks[f.id].state == TaskState.FAILED 
-                and self._tasks[f.id].on_error
+                and self._tasks[f.id].has_error_callback
             ):
                 self._executor.submit(self._tasks[f.id].on_error)
-            elif self._tasks[f.id].on_success:
+            elif self._tasks[f.id].has_success_callback:
                 self._executor.submit(self._tasks[f.id].on_success)

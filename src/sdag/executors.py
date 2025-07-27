@@ -27,27 +27,34 @@ class Executor(ABC):
     def poll(self) -> list[Result]: ...
 
 class TestExecutor(Executor):
-    _results: list[Result] = []
-    executed: list[UUID] = []
+    __test__: bool = False
+    _results: list[Result]
+    executed: list[UUID]
+
+    def __init__(self) -> None:
+        self._results = []
+        self.executed = []
 
     def submit(
         self,
         func: Callable[..., Result],
     ) -> None:
         res = func()
-        self.executed.append(res.id)
+        if res is not None:
+            self.executed.append(res.id)
         self._results.append(res)
 
     def poll(self) -> list[Result]:
-        if self._results:
-            return [
-                self._results.pop(i) 
-                for i in range(len(self._results))
-            ]
-        return []
+        return [
+            self._results.pop(i) 
+            for i in range(len(self._results))
+        ]
 
 class SequentialExecutor(Executor):
-    _results: list[Result] = []
+    _results: list[Result]
+
+    def __init__(self) -> None:
+        self._results = []
 
     def submit(
         self,
@@ -56,12 +63,10 @@ class SequentialExecutor(Executor):
         self._results.append(func())
 
     def poll(self) -> list[Result]:
-        if self._results:
-            return [
-                self._results.pop(i) 
-                for i in range(len(self._results))
-            ]
-        return []
+        return [
+            self._results.pop(i) 
+            for i in range(len(self._results))
+        ]
 
 class PathosExecutor(Executor):
     _pool: ProcessPool
@@ -69,10 +74,11 @@ class PathosExecutor(Executor):
 
     def __init__(self, workers=4) -> None:
         self._pool = ProcessPool(workers=workers)
+        self._futures = []
     
     def submit(
         self, 
-        func: Callable[..., dict[str, Any]] | Callable[..., str],
+        func: Callable[..., Result],
     ) -> None:
         self._futures.append(self._pool.apipe(func))
 
@@ -85,3 +91,4 @@ class PathosExecutor(Executor):
     
     def empty(self) -> bool:
         return len(self._futures) == 0
+

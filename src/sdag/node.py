@@ -81,7 +81,15 @@ class _Node(Generic[T, U]):
 
     @abstractmethod
     def on_error(self) -> None: ...
-        
+
+    @property
+    def has_success_callback(self) -> bool:
+        return self._suc is not None
+
+    @property
+    def has_error_callback(self) -> bool:
+        return self._err is not None
+
     @property
     def state(self) -> TaskState:
         return self._state
@@ -154,15 +162,12 @@ class Task(_Node[Callable[..., dict[str, Any]], TaskResult]):
         self.input = TaskResult(id=self.id)
     
     def run(self) -> TaskResult:
-        if self._input_history:
-            kwargs = self._input_history[-1]
-        else:
-            kwargs = {}
         try:
-            res = self._exe(**kwargs)
+            res = self._exe(**self.input.values)
         except Exception as e:
             return TaskResult(id=self.id, error=e)
 
+        print("Returning result from task")
         return TaskResult(id=self.id, values=res)
     
     def register_input(self, input: TaskResult) -> None:
@@ -197,11 +202,6 @@ class Branch(_Node[Callable[..., str], BranchResult]):
         )
    
     def run(self) -> BranchResult:
-        if len(self._input_history) == 0:
-            raise Exception(
-                f"No input history available for task {self.name}"
-            )
-        
         try:
             res = self._exe(**self.input.values)
         except Exception as e:
