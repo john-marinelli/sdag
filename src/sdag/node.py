@@ -5,7 +5,7 @@ from numba.typed import List, Dict
 from numba import njit
 from numba import types
 from sdag.state import TaskState, POLICIES, RunPolicy
-from sdag.result import TaskResult, BranchResult
+from sdag.result import TaskResult, BranchResult, Result
 from sdag.exceptions import TaskAttributeAccessError
 from abc import abstractmethod
 import inspect
@@ -15,8 +15,7 @@ logging.basicConfig(filename="t.log", level=logging.INFO)
 
 
 T = TypeVar("T", bound=Callable[..., Any])
-U = TypeVar("U")
-V = TypeVar("V")
+U = TypeVar("U", bound=Result)
 JITInputValue = types.UnionType([types.float64, types.int64, types.unicode_type])
 
 
@@ -38,6 +37,7 @@ class _Node(Generic[T, U]):
     _input_history: list[dict[str, Any]] | List[Dict[str, Any]] = []
     _output: U | None = None
     _input: TaskResult
+    _input_value: dict[str, Any]
     _store_input_history: bool
     _jit: bool
     
@@ -69,6 +69,7 @@ class _Node(Generic[T, U]):
         self._state = TaskState.BUILDING
         self._store_input_history = store_input_history
         self._policy = POLICIES[RunPolicy.ALL_SUCCESS]
+        self._input_values = {}
         
         sig = inspect.signature(self._exe)
         self._sig = list(sig.parameters.keys())
@@ -122,6 +123,10 @@ class _Node(Generic[T, U]):
     
     @input.setter
     def input(self, input: TaskResult) -> None:
+        self._input_value = {
+            k: v for k, v in input.value.items()
+            if k in self._sig
+        }
         self._input = input
 
     def policy(self, states: list[TaskState]) -> bool:
@@ -134,9 +139,6 @@ class _Node(Generic[T, U]):
     def place(self) -> None:
         self._placed = True
 
-    @abstractmethod
-    def register_input(self, input: U) -> None: ...
-    
     def __repr__(self):
         return self.name
 
@@ -163,26 +165,14 @@ class Task(_Node[Callable[..., dict[str, Any]], TaskResult]):
     
     def run(self) -> TaskResult:
         try:
-            res = self._exe(**self.input.values)
+            res = self._exe(**self._input_value)
         except Exception as e:
             return TaskResult(id=self.id, error=e)
 
         print("Returning result from task")
-        return TaskResult(id=self.id, values=res)
+        return TaskResult(id=self.id, value=res)
     
-    def register_input(self, input: TaskResult) -> None:
-        params = {
-            k: v for k, v in input.values.items() if k in self._sig
-        }
-        if self._store_input_history:
-            self._input_history.append(params)
-            input.values["input_history"] = self._input_history
-            self.input = input
-            return
-        
-        self.input = input
 
-    
 class Branch(_Node[Callable[..., str], BranchResult]): 
 
     def __init__(
@@ -203,9 +193,9 @@ class Branch(_Node[Callable[..., str], BranchResult]):
    
     def run(self) -> BranchResult:
         try:
-            res = self._exe(**self.input.values)
+            res = self._exe(**self._input_value)
         except Exception as e:
             return BranchResult(id=self.id, error=e)
 
-        return BranchResult(id=self.id, next_task=res)
+        return BranchResult(id=self.id, value=res)
 

@@ -2,45 +2,46 @@ from sdag.builder import DAGBuilder
 from sdag.dag import DAG
 from sdag.node import Task
 from sdag.executors import TestExecutor
+from sdag.result import TaskResult
 
 def t1():
     print("Executing t1")
     return {
-        "value": "From t1"
+        "value": 1
     }
 
 def t2(value: str):
     print(value)
     return {
-        "value": "From t2"
+        "value": 2
     }
     
 def t3(value: str):
     print(value)
     return {}
 
-# def test_simple_dag():
-#     executor = TestExecutor()
-#     builder = DAGBuilder(dag=DAG(executor=executor))
-#     task1 = Task(on_execute=t1, name="t1")
-#     task2 = Task(on_execute=t2, name="t2")
-#     task3 = Task(on_execute=t3, name="t3")
-#
-#     builder.add_root(
-#         task1
-#     ).add_task(
-#         task2
-#     ).add_task(
-#         task3
-#     )
-#
-#     dag = builder.finalize()
-#
-#     dag.run()
-#
-#     assert [task1.id, task2.id, task3.id] == executor.executed
-#
-#
+def test_simple_dag():
+    executor = TestExecutor()
+    builder = DAGBuilder(dag=DAG(executor=executor))
+    task1 = Task(on_execute=t1, name="t1")
+    task2 = Task(on_execute=t2, name="t2")
+    task3 = Task(on_execute=t3, name="t3")
+
+    builder.add_root(
+        task1
+    ).add_task(
+        task2
+    ).add_task(
+        task3
+    )
+
+    dag = builder.finalize()
+
+    dag.run()
+
+    assert [task1.id, task2.id, task3.id] == executor.executed
+
+
 def test_dag_values():
     executor = TestExecutor()
     builder = DAGBuilder(dag=DAG(executor=executor))
@@ -59,3 +60,9 @@ def test_dag_values():
     dag = builder.finalize()
 
     dag.run()
+
+    assert task1._input_value == TaskResult(
+        id=task1.id,
+        values={}
+    )
+    assert task2.input

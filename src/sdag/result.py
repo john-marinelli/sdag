@@ -14,20 +14,21 @@ class Result:
 
 @dataclass
 class TaskResult(Result):
-    values: dict[str, Any] = field(default_factory=dict)
+    value: dict[str, Any] = field(default_factory=dict)
     
     def __repr__(self) -> str:
         return (
             f"Task ID: {self.id}\n"
-            f"Values: {self.values}"
+            f"Values: {self.value}"
         )
 
 @dataclass
 class BranchResult(Result):
-    next_task: str | None = None
+    value: str | None = "EMPTY BRANCH RESULT"
    
     def __repr__(self) -> str:
         return (
             f"Task ID: {self.id}\n"
-            f"Next task: {self.next_task}"
+            f"Next task: {self.value}"
         )
+
