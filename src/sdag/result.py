@@ -24,7 +24,7 @@ class TaskResult(Result):
 
 @dataclass
 class BranchResult(Result):
-    value: str | None = "EMPTY BRANCH RESULT"
+    value: str | None = None
    
     def __repr__(self) -> str:
         return (

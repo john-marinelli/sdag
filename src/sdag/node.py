@@ -6,7 +6,7 @@ from numba import njit
 from numba import types
 from sdag.state import TaskState, POLICIES, RunPolicy
 from sdag.result import TaskResult, BranchResult, Result
-from sdag.exceptions import TaskAttributeAccessError
+from sdag.exceptions import TaskAttributeAccessError, DAGBuildError
 from abc import abstractmethod
 import inspect
 import logging
@@ -48,7 +48,6 @@ class _Node(Generic[T, U]):
         on_success: Callable[..., None] | None = None,
         on_error: Callable[..., None] | None = None,
         jit: bool = False,
-        store_input_history: bool = False
     ) -> None:
         if jit:
             self._jit_exe = njit()(on_execute)
@@ -67,7 +66,6 @@ class _Node(Generic[T, U]):
         self.name = name
         self.id = uuid4()
         self._state = TaskState.BUILDING
-        self._store_input_history = store_input_history
         self._policy = POLICIES[RunPolicy.ALL_SUCCESS]
         self._input_values = {}
         
@@ -98,7 +96,7 @@ class _Node(Generic[T, U]):
     @state.setter
     def state(self, state: TaskState) -> None:
         if state == TaskState.BUILDING:
-            raise ValueError("Cannot set state with TaskState.BUILDING.")
+            raise DAGBuildError("Cannot set state with TaskState.BUILDING.")
         self._state = state
 
     @property
@@ -151,7 +149,6 @@ class Task(_Node[Callable[..., dict[str, Any]], TaskResult]):
         on_success: Callable[..., None] | None = None,
         on_error: Callable[..., None] | None = None,
         jit: bool = False,
-        store_input_history: bool = False
     ) -> None:
         super().__init__(
             name=name,
@@ -159,7 +156,6 @@ class Task(_Node[Callable[..., dict[str, Any]], TaskResult]):
             on_success=on_success,
             on_error=on_error,
             jit=jit,
-            store_input_history=store_input_history
         )
         self.input = TaskResult(id=self.id)
     
@@ -169,11 +165,11 @@ class Task(_Node[Callable[..., dict[str, Any]], TaskResult]):
         except Exception as e:
             return TaskResult(id=self.id, error=e)
 
-        print("Returning result from task")
         return TaskResult(id=self.id, value=res)
     
 
 class Branch(_Node[Callable[..., str], BranchResult]): 
+    _error_branch: str | None
 
     def __init__(
         self,
@@ -181,21 +177,21 @@ class Branch(_Node[Callable[..., str], BranchResult]):
         on_execute: Callable[..., str],
         on_success: Callable[..., None] | None = None,
         on_error: Callable[..., None] | None = None,
-        store_input_history: bool = False
+        error_branch: str | None = None,
     ) -> None:
+        self._error_branch = error_branch
         super().__init__(
             name=name,
             on_execute=on_execute,
             on_success=on_success,
             on_error=on_error,
-            store_input_history=store_input_history
         )
    
     def run(self) -> BranchResult:
         try:
             res = self._exe(**self._input_value)
         except Exception as e:
-            return BranchResult(id=self.id, error=e)
+            return BranchResult(id=self.id, error=e, value=self._error_branch)
 
         return BranchResult(id=self.id, value=res)
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 from sdag.state import TaskState
 from sdag.node import _Node, Task
 from sdag.executors import Executor
-from sdag.result import TaskResult
+from sdag.result import TaskResult, BranchResult, Result
 from collections import deque
 from uuid import UUID
 import logging
@@ -55,12 +55,21 @@ class DAG:
         self._bf_exec()
                 
     def _bf_exec(self) -> None:
+        """
+            Top level function to run the DAG.
+            This will finish once all tasks have
+            executed or failed based on execution policy.
+        """
         while self._queue:
             self._submit_tasks()
             self._poll_finished()
 
             
     def _submit_tasks(self) -> None:
+        """
+            Grabs ready tasks from the queue
+            and submits them to the executor.
+        """
         exec_q = [
             t for t in self._queue
             if self._can_run(t)
@@ -72,14 +81,22 @@ class DAG:
             self._tasks[t].state = TaskState.RUNNING
 
     def _can_run(self, task: UUID) -> bool:
+        """
+            Checks a tasks state and checks its 
+            dependencies against the policy it was
+            assigned.
+        """
         return (
-            self._tasks[task].state == TaskState.READY and
             self._tasks[task].policy(
                 [self._tasks[t].state for t in self._tasks[task].deps]
             )
         )
     
     def _poll_finished(self) -> None:
+        """
+            Polls executor for finished tasks then 
+            queues downstream tasks.
+        """
         finished = self._executor.poll()
 
         for f in finished:
@@ -89,14 +106,10 @@ class DAG:
             else:
                 self._tasks[f.id].state = TaskState.SUCCESS
 
-            for t in self._adj[f.id]:
-                if isinstance(f, TaskResult):
-                    self._tasks[t].input = f
-                if self._tasks[f.id].state == TaskState.SUCCESS:
-                    self._tasks[t].state = TaskState.READY
-                    self._queue.extend(self._adj[f.id])
-                else:
-                    self._tasks[t].state = TaskState.SKIPPED
+            if isinstance(f, TaskResult):
+                self._handle_task_result(f)
+            elif isinstance(f, BranchResult):
+                self._handle_branch_result(f)
 
             self._queue.remove(f.id)
             if (
@@ -106,3 +119,38 @@ class DAG:
                 self._executor.submit(self._tasks[f.id].on_error)
             elif self._tasks[f.id].has_success_callback:
                 self._executor.submit(self._tasks[f.id].on_success)
+    
+    def _handle_task_result(self, res: TaskResult) -> None:
+        """
+            Handles a finished task, queueing up all
+            tasks that are downstream.
+        """
+        for t in self._adj[res.id]:
+            self._tasks[t].input = res
+            if self._tasks[res.id].state == TaskState.SUCCESS:
+                self._tasks[t].state = TaskState.READY
+            else:
+                self._tasks[t].state = TaskState.SKIPPED
+            self._queue.append(t)
+
+    def _handle_branch_result(self, res: BranchResult) -> None:
+        """
+            Handles a finished branch task, queuing up
+            the task with a name matching the branch's
+            returned string.
+        """
+        if self._tasks[res.id].state == TaskState.SUCCESS:
+            # Just playing it safe in case there are
+            # multiple tasks with the same name
+            picked = [
+                t for t in self._adj[res.id] 
+                if self._tasks[t].name == res.value
+            ]
+            for t in picked:
+                self._tasks[t].input = self._tasks[res.id].input
+                self._tasks[t].state = TaskState.READY
+                self._queue.append(t)
+        else:
+            for t in self._adj[res.id]:
+                self._tasks[t].state = TaskState.SKIPPED
+
