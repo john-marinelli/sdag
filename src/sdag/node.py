@@ -30,6 +30,7 @@ class _Node(Generic[T, U]):
     _pol: Callable[[list[TaskState]], bool]
     _state: TaskState
     _deps: list[UUID] = []
+    _upstream: list[UUID] = []
     _policy: Callable[[list[TaskState]], bool]
     _placed: bool = False
     _processed: bool = False
@@ -37,9 +38,6 @@ class _Node(Generic[T, U]):
     _input_history: list[dict[str, Any]] | List[Dict[str, Any]] = []
     _output: U | None = None
     _input: TaskResult
-    _input_value: dict[str, Any]
-    _store_input_history: bool
-    _jit: bool
     
     def __init__(
         self,
@@ -47,27 +45,14 @@ class _Node(Generic[T, U]):
         on_execute: T,
         on_success: Callable[..., None] | None = None,
         on_error: Callable[..., None] | None = None,
-        jit: bool = False,
     ) -> None:
-        if jit:
-            self._jit_exe = njit()(on_execute)
-            def jitted(**kwargs) -> dict[str, Any]:
-                if self._jit_exe is None:
-                    raise Exception(
-                        "No jitted function available to call"
-                    )
-                res = self._jit_exe(**kwargs)
-                return {k: v for k, v in res.items()}
-            self._exe = jitted  # type: ignore
-        else:
-            self._exe = on_execute
+        self._exe = on_execute
         self._suc = on_success
         self._err = on_error
         self.name = name
         self.id = uuid4()
         self._state = TaskState.BUILDING
         self._policy = POLICIES[RunPolicy.ALL_SUCCESS]
-        self._input_values = {}
         
         sig = inspect.signature(self._exe)
         self._sig = list(sig.parameters.keys())
@@ -106,6 +91,13 @@ class _Node(Generic[T, U]):
     @deps.setter
     def deps(self, deps: list[UUID]) -> None:
         self._deps = deps
+
+    @property
+    def upstream(self) -> list[UUID]:
+        return self._upstream
+
+    def add_upstream(self, task: UUID) -> None:
+        self._upstream.append(task)
 
     @property
     def output(self) -> U | None:
@@ -148,14 +140,12 @@ class Task(_Node[Callable[..., dict[str, Any]], TaskResult]):
         on_execute: Callable[..., dict[str, Any]],
         on_success: Callable[..., None] | None = None,
         on_error: Callable[..., None] | None = None,
-        jit: bool = False,
     ) -> None:
         super().__init__(
             name=name,
             on_execute=on_execute,
             on_success=on_success,
             on_error=on_error,
-            jit=jit,
         )
         self.input = TaskResult(id=self.id)
     

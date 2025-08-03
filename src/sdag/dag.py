@@ -2,7 +2,7 @@ from __future__ import annotations
 from sdag.state import TaskState
 from sdag.node import _Node, Task
 from sdag.executors import Executor
-from sdag.result import TaskResult, BranchResult, Result
+from sdag.result import TaskResult, BranchResult
 from collections import deque
 from uuid import UUID
 import logging
@@ -38,6 +38,10 @@ class DAG:
     
     def _add_upstream(self, upstream: _Node, downstream: _Node) -> None:
         self._adj[upstream.id].append(downstream.id)
+        self._tasks[downstream.id].deps = (
+            self._tasks[upstream.id].deps 
+            + [upstream.id]
+        )
         if downstream.id not in self._adj:
             self._adj[downstream.id] = []
         self._tasks[downstream.id] = downstream
@@ -87,6 +91,7 @@ class DAG:
             assigned.
         """
         return (
+            self._tasks[task].state == TaskState.READY and
             self._tasks[task].policy(
                 [self._tasks[t].state for t in self._tasks[task].deps]
             )
